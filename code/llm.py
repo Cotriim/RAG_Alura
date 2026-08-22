@@ -21,32 +21,24 @@ Contexto recuperado:
 MENSAGEM_SEM_CONTEXTO = "Não encontrei essa informação nos documentos disponíveis."
 
 #Função que gera a resposta da IA RAG
-def gerar_resposta(
-    pergunta: str,
-    filtro_metadados: dict = None,
-    k: int = 20,
-    top_n: int = 5,
-    limiar_confianca: float = 0.0,
-) -> dict:
+def gerar_resposta(pergunta: str, historico: list = None) -> dict:
 
-    contexto, fontes = recuperar_contexto(
-        pergunta,
-        k=k,
-        top_n=top_n,
-        filtro_metadados=filtro_metadados,
-        limiar_confianca=limiar_confianca,
-    )
+    contexto, fontes = recuperar_contexto(pergunta)
 
     #Verificação se a IA conseguiu o contexto ou não
     if not contexto:
         return {"resposta": MENSAGEM_SEM_CONTEXTO, "fontes": [], "contexto_encontrado": False}
 
     #Fazendo a pergunta junto com o contexto
+    mensagens = [{"role": "system", "content": PROMPT_SISTEMA.format(contexto=contexto)}]
+
+    if historico:
+        for msg in historico:
+            mensagens.append({"role": msg["role"], "content": msg["content"]})
+
+    mensagens.append({"role": "user", "content": pergunta})
+
     llm = ChatGroq(model=MODELO_LLM, temperature=0)
-    mensagens = [
-        {"role": "system", "content": PROMPT_SISTEMA.format(contexto=contexto)},
-        {"role": "user", "content": pergunta},
-    ]
     resposta_llm = llm.invoke(mensagens)
 
     #Validação para ver se não voltou vazia
