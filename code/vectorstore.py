@@ -48,3 +48,10 @@ def dividir_chunks2(documentos):
 def vetorizar_chunks(chunks):
     Chroma.from_documents(chunks, embed_model, persist_directory=CAMINHO_DB)
 
+
+def carregar_db():
+    return Chroma(persist_directory=CAMINHO_DB, embedding_function=embed_model)
+
+
+def db_existe():
+    return os.path.isdir(CAMINHO_DB) and len(os.listdir(CAMINHO_DB)) > 0
