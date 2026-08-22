@@ -1,4 +1,4 @@
 docs/*.pdf
 code/*.env
-code/*.pyc
+code/__pycache__/*.pyc
 db
