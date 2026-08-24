@@ -107,11 +107,7 @@ RAG_Alura/
 │   └── requirements.txt
 ├── docs/                # PDFs a serem indexados
 ├── db/                  # criado automaticamente na primeira execução
-├── Dockerfile
-├── docker-compose.yml
-├── .dockerignore
-├── .gitignore
-└── oci/                 # scripts e guia de deploy na OCI
+└── .gitignore
 ```
 
 ### Instalação
