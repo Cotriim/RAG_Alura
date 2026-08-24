@@ -90,24 +90,34 @@ Se nenhum contexto relevante for encontrado, o agente responde com uma mensagem 
 - Python 3.10+
 - Uma chave de API da [Groq](https://console.groq.com/keys)
 
-### 2. Estrutura de pastas esperada
+### 2. Estrutura de pastas do projeto
+
+Os arquivos Python ficam dentro da pasta `code/`. As pastas `db/` e `docs/` ficam **fora** de `code/`, no mesmo nível — é assim que `vectorstore.py` resolve os caminhos (`CAMINHO_DB`/`CAMINHO_DOCS` = pasta de `vectorstore.py` + `..` + `db`/`docs`).
 
 ```
-projeto/
-├── app.py
-├── main.py
-├── llm.py
-├── retrieval.py
-├── vectorstore.py
-├── requirements.txt
-├── .env
-├── docs/        # coloque aqui os PDFs a serem indexados
-└── db/          # criado automaticamente na primeira execução
+RAG_Alura/
+├── code/
+│   ├── .env             # sua chave da Groq (não versionar)
+│   ├── app.py
+│   ├── main.py
+│   ├── llm.py
+│   ├── retrieval.py
+│   ├── vectorstore.py
+│   └── requirements.txt
+├── docs/                # coloque aqui os PDFs a serem indexados
+├── db/                  # criado automaticamente na primeira execução
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── .gitignore
+└── oci/                 # scripts e guia de deploy na OCI
 ```
 
 ### 3. Instalação
 
 ```bash
+cd RAG_Alura/code
+
 # criar e ativar um ambiente virtual (recomendado)
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
@@ -118,28 +128,32 @@ pip install -r requirements.txt
 
 ### 4. Configurar variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto com sua chave da Groq:
+Crie um arquivo `.env` **dentro da pasta `code/`** com sua chave da Groq:
 
 ```
 GROQ_API_KEY=sua_chave_aqui
 ```
 
-> ⚠️ **Nunca** commite o arquivo `.env` no repositório. Adicione-o ao `.gitignore`.
+> ⚠️ **Nunca** commite o arquivo `.env` no repositório. Ele já está no `.gitignore`.
 
 ### 5. Adicionar os documentos
 
-Coloque os arquivos PDF que servirão de base de conhecimento dentro da pasta `docs/`.
+Coloque os arquivos PDF que servirão de base de conhecimento dentro da pasta `docs/` (na raiz do projeto, fora de `code/`).
 
 ### 6. Executar
 
+Rode os comandos a partir de dentro de `code/`:
+
 **Via interface web (Gradio):**
 ```bash
+cd code
 python app.py
 ```
-Isso abrirá uma interface de chat no navegador. Na primeira execução, o banco vetorial será criado automaticamente a partir dos PDFs em `docs/` (pode levar alguns minutos, dependendo da quantidade de documentos).
+Isso abrirá uma interface de chat no navegador. Na primeira execução, o banco vetorial será criado automaticamente a partir dos PDFs em `../docs` (pode levar alguns minutos, dependendo da quantidade de documentos).
 
 **Via terminal (CLI):**
 ```bash
+cd code
 python main.py
 ```
 Digite suas perguntas diretamente no terminal. Digite `sair`, `exit` ou `quit` para encerrar.
@@ -182,3 +196,9 @@ Não encontrei essa informação nos documentos disponíveis.
 ```
 
 Esse comportamento é intencional: o agente é instruído a nunca inventar informações que não estejam no contexto recuperado, evitando respostas incorretas ou enganosas.
+
+---
+
+## ☁️ Deploy na nuvem (OCI)
+
+O projeto inclui um `Dockerfile` e scripts prontos para publicar a aplicação na Oracle Cloud Infrastructure (Container Registry + Container Instances, ou Compute VM). Veja o passo a passo completo em [`oci/README-DEPLOY.md`](oci/README-DEPLOY.md).
