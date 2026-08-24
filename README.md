@@ -1,98 +1,99 @@
-# 🤖 Assistente Interno com RAG
+# Assistente Interno com RAG
 
-Agente de IA conversacional que responde perguntas com base **exclusivamente** nos documentos internos da empresa (PDFs), usando a técnica de **RAG (Retrieval-Augmented Generation)** com reranking semântico para aumentar a precisão das respostas.
+Agente de IA conversacional que responde perguntas com base exclusivamente nos documentos internos de uma empresa (PDFs), usando RAG (Retrieval-Augmented Generation) com reranking semântico.
 
-O agente foi construído para reduzir alucinações: ele nunca deve responder com base em conhecimento externo do modelo — apenas com o que está de fato presente nos documentos indexados. Quando não encontra a informação, ele avisa isso claramente ao usuário.
+A regra é simples: o agente nunca responde com conhecimento próprio do modelo, só com o que está de fato nos documentos indexados. Se não encontra a informação, ele diz isso claramente em vez de tentar adivinhar.
 
 ---
 
-## 🏗️ Arquitetura da solução
+## Arquitetura
 
-O projeto segue um pipeline clássico de RAG, dividido em módulos:
+Pipeline dividido em módulos:
 
 ```
-                     ┌─────────────────────┐
-                     │   /docs (PDFs)       │
-                     └──────────┬───────────┘
-                                │  ingestão (1x)
-                                ▼
-                     ┌─────────────────────┐
-                     │   vectorstore.py     │
-                     │  - Carrega PDFs      │
-                     │  - Split em chunks   │
-                     │  - Gera embeddings   │
-                     │  - Persiste no Chroma│
-                     └──────────┬───────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │      /db (Chroma)    │
-                     └──────────┬───────────┘
-                                │  busca (a cada pergunta)
-                                ▼
-                     ┌─────────────────────┐
-                     │    retrieval.py      │
-                     │  - Busca top-k       │
-                     │    (similaridade)    │
-                     │  - Reranking com     │
-                     │    Cross-Encoder     │
-                     │  - Monta contexto    │
-                     └──────────┬───────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │       llm.py         │
-                     │  - Prompt com regras │
-                     │  - Chama o LLM (Groq)│
-                     │  - Valida resposta   │
-                     │  - Formata fontes    │
-                     └──────────┬───────────┘
-                                │
-                                ▼
-                     ┌─────────────────────┐
-                     │  app.py / main.py    │
-                     │  - Interface Gradio  │
-                     │    ou terminal (CLI) │
-                     └─────────────────────┘
+┌─────────────────────┐
+│   /docs (PDFs)       │
+└──────────┬───────────┘
+           │  ingestão (1x)
+           ▼
+┌─────────────────────┐
+│   vectorstore.py     │
+│  - Carrega PDFs      │
+│  - Split em chunks   │
+│  - Gera embeddings   │
+│  - Persiste no Chroma│
+└──────────┬───────────┘
+           │
+           ▼
+┌─────────────────────┐
+│      /db (Chroma)    │
+└──────────┬───────────┘
+           │  busca (a cada pergunta)
+           ▼
+┌─────────────────────┐
+│    retrieval.py      │
+│  - Busca top-k       │
+│    (similaridade)    │
+│  - Reranking com     │
+│    Cross-Encoder     │
+│  - Monta contexto    │
+└──────────┬───────────┘
+           │
+           ▼
+┌─────────────────────┐
+│       llm.py         │
+│  - Prompt com regras │
+│  - Chama o LLM (Groq)│
+│  - Valida resposta   │
+│  - Formata fontes    │
+└──────────┬───────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  app.py / main.py    │
+│  - Interface Gradio  │
+│    ou terminal (CLI) │
+└─────────────────────┘
 ```
 
-### Fluxo da consulta (Retrieval)
+### Fluxo da consulta
 
-1. **Busca por similaridade**: `buscar_candidatos()` recupera os `k=20` chunks mais similares à pergunta no banco vetorial Chroma.
-2. **Reranking**: `rerankear()` usa um Cross-Encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) para reordenar esses candidatos por relevância real em relação à pergunta, mantendo apenas os `top_n=5` melhores.
-3. **Montagem do contexto**: `montar_contexto()` filtra os trechos abaixo do limiar de confiança e monta o texto final, junto com a lista de fontes (arquivo + página).
-4. **Geração da resposta**: `gerar_resposta()` monta o prompt do sistema (com o contexto injetado) e envia ao LLM via Groq, incluindo o histórico da conversa.
-5. **Formatação final**: `formatar_resposta_final()` adiciona a lista de fontes consultadas ao final da resposta.
+1. `buscar_candidatos()` recupera os `k=20` chunks mais similares à pergunta no Chroma.
+2. `rerankear()` usa um Cross-Encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) pra reordenar por relevância real, mantendo os `top_n=5` melhores.
+3. `montar_contexto()` filtra o que está abaixo do limiar de confiança e monta o texto final, junto com a lista de fontes (arquivo + página).
+4. `gerar_resposta()` monta o prompt do sistema com o contexto injetado e chama o LLM via Groq, incluindo o histórico da conversa.
+5. `formatar_resposta_final()` adiciona as fontes consultadas ao final da resposta.
 
-Se nenhum contexto relevante for encontrado, o agente responde com uma mensagem padrão informando que não encontrou a informação nos documentos — sem tentar "chutar" uma resposta.
-
----
-
-## 🛠️ Tecnologias e ferramentas utilizadas
-
-| Categoria | Tecnologia |
-|---|---|
-| Linguagem | Python |
-| Orquestração RAG | [LangChain](https://www.langchain.com/) (`langchain-community`, `langchain-text-splitters`) |
-| LLM | Groq API (`langchain-groq`), modelo `openai/gpt-oss-120b` |
-| Embeddings | HuggingFace — `ibm-granite/granite-embedding-30m-english` (`langchain-huggingface`) |
-| Banco vetorial | [Chroma](https://www.trychroma.com/) (`langchain-chroma`, `chromadb`) |
-| Reranking | Cross-Encoder `cross-encoder/ms-marco-MiniLM-L-6-v2` (`sentence-transformers`) |
-| Leitura de PDFs | `PyPDFDirectoryLoader` (`pypdf`) |
-| Interface web | [Gradio](https://www.gradio.dev/) (`gr.ChatInterface`) |
-| Variáveis de ambiente | `python-dotenv` |
+Sem contexto relevante, o agente cai na resposta padrão avisando que não encontrou a informação — sem chutar.
 
 ---
 
-## ▶️ Instruções para executar o projeto
+## Stack
 
-### 1. Pré-requisitos
+| Categoria             | Tecnologia                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Linguagem             | Python                                                                                       |
+| Orquestração RAG      | [LangChain](https://www.langchain.com/) (`langchain-community`, `langchain-text-splitters`) |
+| LLM                   | Groq API (`langchain-groq`), modelo `openai/gpt-oss-120b`                                   |
+| Embeddings            | HuggingFace — `ibm-granite/granite-embedding-30m-english` (`langchain-huggingface`)         |
+| Banco vetorial        | [Chroma](https://www.trychroma.com/) (`langchain-chroma`, `chromadb`)                       |
+| Reranking             | Cross-Encoder `cross-encoder/ms-marco-MiniLM-L-6-v2` (`sentence-transformers`)              |
+| Leitura de PDFs       | `PyPDFDirectoryLoader` (`pypdf`)                                                             |
+| Interface web         | [Gradio](https://www.gradio.dev/) (`gr.ChatInterface`)                                      |
+| Variáveis de ambiente | `python-dotenv`                                                                              |
+
+---
+
+## Rodando o projeto
+
+### Pré-requisitos
+
 - Python 3.10+
-- Uma chave de API da [Groq](https://console.groq.com/keys)
+- Chave de API da [Groq](https://console.groq.com/keys)
 
-### 2. Estrutura de pastas do projeto
+### Estrutura de pastas
 
-Os arquivos Python ficam dentro da pasta `code/`. As pastas `db/` e `docs/` ficam **fora** de `code/`, no mesmo nível — é assim que `vectorstore.py` resolve os caminhos (`CAMINHO_DB`/`CAMINHO_DOCS` = pasta de `vectorstore.py` + `..` + `db`/`docs`).
+Os arquivos Python ficam em `code/`. `db/` e `docs/` ficam fora de `code/`, no mesmo nível — é assim que `vectorstore.py` resolve os caminhos (`CAMINHO_DB`/`CAMINHO_DOCS` = pasta de `vectorstore.py` + `..` + `db`/`docs`).
 
 ```
 RAG_Alura/
@@ -104,7 +105,7 @@ RAG_Alura/
 │   ├── retrieval.py
 │   ├── vectorstore.py
 │   └── requirements.txt
-├── docs/                # coloque aqui os PDFs a serem indexados
+├── docs/                # PDFs a serem indexados
 ├── db/                  # criado automaticamente na primeira execução
 ├── Dockerfile
 ├── docker-compose.yml
@@ -113,56 +114,56 @@ RAG_Alura/
 └── oci/                 # scripts e guia de deploy na OCI
 ```
 
-### 3. Instalação
+### Instalação
 
 ```bash
 cd RAG_Alura/code
 
-# criar e ativar um ambiente virtual (recomendado)
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
 
-# instalar as dependências
 pip install -r requirements.txt
 ```
 
-### 4. Configurar variáveis de ambiente
+### Variáveis de ambiente
 
-Crie um arquivo `.env` **dentro da pasta `code/`** com sua chave da Groq:
+Crie um `.env` dentro de `code/`:
 
 ```
 GROQ_API_KEY=sua_chave_aqui
 ```
 
-> ⚠️ **Nunca** commite o arquivo `.env` no repositório. Ele já está no `.gitignore`.
+O `.env` já está no `.gitignore` — não commite essa chave.
 
-### 5. Adicionar os documentos
+### Documentos
 
-Coloque os arquivos PDF que servirão de base de conhecimento dentro da pasta `docs/` (na raiz do projeto, fora de `code/`).
+Coloque os PDFs que servirão de base de conhecimento em `docs/`, na raiz do projeto (fora de `code/`).
 
-### 6. Executar
+### Executando
 
-Rode os comandos a partir de dentro de `code/`:
+Via interface web (Gradio):
 
-**Via interface web (Gradio):**
 ```bash
 cd code
 python app.py
 ```
-Isso abrirá uma interface de chat no navegador. Na primeira execução, o banco vetorial será criado automaticamente a partir dos PDFs em `../docs` (pode levar alguns minutos, dependendo da quantidade de documentos).
 
-**Via terminal (CLI):**
+Na primeira execução o banco vetorial é criado a partir dos PDFs em `../docs` — pode levar alguns minutos dependendo do volume de documentos.
+
+Via terminal:
+
 ```bash
 cd code
 python main.py
 ```
-Digite suas perguntas diretamente no terminal. Digite `sair`, `exit` ou `quit` para encerrar.
+
+`sair`, `exit` ou `quit` encerram a sessão.
 
 ---
 
-## 💬 Exemplos de perguntas que o agente consegue responder
+## Exemplos de perguntas
 
-O agente responde a perguntas cujas respostas estejam **presentes nos documentos indexados** em `docs/`. Exemplos típicos para um assistente interno de empresa:
+Depende do conteúdo dos PDFs em `docs/`, mas para um assistente interno típico:
 
 - "Qual é a política de reembolso de despesas de viagem?"
 - "Quantos dias de férias eu tenho direito por ano?"
@@ -170,35 +171,29 @@ O agente responde a perguntas cujas respostas estejam **presentes nos documentos
 - "Qual é o procedimento para solicitar home office?"
 - "Quais são os benefícios oferecidos pela empresa?"
 
-> 💡 As perguntas reais que o agente conseguirá responder dependem inteiramente do conteúdo dos PDFs colocados na pasta `docs/`.
-
----
-
-## 📄 Exemplos de respostas geradas pelo agente
+## Exemplo de resposta
 
 **Pergunta:** "Quantos dias de férias eu tenho direito por ano?"
 
-**Resposta:**
 ```
-De acordo com os documentos internos, o colaborador tem direito a 30 dias 
-corridos de férias por ano, podendo ser divididos em até três períodos, 
+De acordo com os documentos internos, o colaborador tem direito a 30 dias
+corridos de férias por ano, podendo ser divididos em até três períodos,
 sendo que um deles não pode ser inferior a 14 dias corridos.
 
 Fontes consultadas:
 - politica_ferias.pdf (página 2)
 ```
 
-**Pergunta:** "Qual o horário de funcionamento do escritório aos sábados?"
+Quando a informação não está nos documentos, a resposta é direta:
 
-**Resposta (quando a informação não está nos documentos):**
 ```
 Não encontrei essa informação nos documentos disponíveis.
 ```
 
-Esse comportamento é intencional: o agente é instruído a nunca inventar informações que não estejam no contexto recuperado, evitando respostas incorretas ou enganosas.
+Esse comportamento é proposital — o agente é instruído a nunca preencher lacunas com suposições.
 
 ---
 
-## ☁️ Deploy na nuvem (OCI)
+## Deploy (OCI)
 
-O projeto inclui um `Dockerfile` e scripts prontos para publicar a aplicação na Oracle Cloud Infrastructure (Container Registry + Container Instances, ou Compute VM). Veja o passo a passo completo em [`oci/README-DEPLOY.md`](oci/README-DEPLOY.md).
+O projeto inclui `Dockerfile` e scripts para publicar na Oracle Cloud Infrastructure (Container Registry + Container Instances, ou Compute VM). Passo a passo em [`oci/README-DEPLOY.md`](https://github.com/Cotriim/RAG_Alura/blob/main/oci/README-DEPLOY.md).
